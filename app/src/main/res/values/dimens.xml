@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Generic Margins -->
+    <dimen name="margin_small">8dp</dimen>
+    <dimen name="margin_medium">16dp</dimen>
+    <dimen name="margin_large">24dp</dimen>
+    <dimen name="margin_xlarge">32dp</dimen>
+    <dimen name="margin_xxlarge">48dp</dimen>
+    <dimen name="margin_top_header">60dp</dimen>
+
+    <!-- Font Sizes -->
+    <dimen name="font_size_header">32sp</dimen>
+    <dimen name="font_size_code_label">24sp</dimen>
+    <dimen name="font_size_code">80sp</dimen>
+    <dimen name="font_size_code_min">20sp</dimen>
+    <dimen name="font_size_code_max">100sp</dimen>
+    <dimen name="font_size_settings_hint">18sp</dimen>
+    <dimen name="font_size_bottom_bar">14sp</dimen>
+
+    <!-- Component-specific dimensions -->
+    <dimen name="bottom_bar_height">60dp</dimen>
+    <dimen name="preview_window_size">150dp</dimen>
+    <dimen name="bottom_bar_icon_padding">8dp</dimen>
+
+</resources> 

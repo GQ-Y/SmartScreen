@@ -1,0 +1,4 @@
+<resources>
+
+    <style name="Theme.SmartScreen" parent="@style/Theme.AppCompat.NoActionBar" />
+</resources>

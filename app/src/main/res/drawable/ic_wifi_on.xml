@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="@android:color/white">
+    
+    <!-- WiFi信号强度指示器 - 使用经典的扇形设计 -->
+    
+    <!-- 最内层小点（信号源） -->
+    <path android:fillColor="@android:color/white"
+        android:pathData="M12,15.5 C12.83,15.5 13.5,16.17 13.5,17 C13.5,17.83 12.83,18.5 12,18.5 C11.17,18.5 10.5,17.83 10.5,17 C10.5,16.17 11.17,15.5 12,15.5 Z"/>
+    
+    <!-- 第二层信号弧 -->
+    <path android:fillColor="@android:color/white"
+        android:pathData="M9.12,13.62 C10.08,12.66 11.46,12.08 12.93,12.08 C14.4,12.08 15.78,12.66 16.74,13.62 L15.33,15.03 C14.72,14.42 13.87,14.08 12.93,14.08 C11.99,14.08 11.14,14.42 10.53,15.03 L9.12,13.62 Z"/>
+    
+    <!-- 第三层信号弧 -->
+    <path android:fillColor="@android:color/white"
+        android:pathData="M6.34,10.83 C8.03,9.14 10.35,8.19 12.86,8.19 C15.37,8.19 17.69,9.14 19.38,10.83 L17.97,12.24 C16.63,10.9 14.82,10.19 12.86,10.19 C10.9,10.19 9.09,10.9 7.75,12.24 L6.34,10.83 Z"/>
+    
+    <!-- 最外层信号弧 -->
+    <path android:fillColor="@android:color/white"
+        android:pathData="M3.55,8.05 C5.97,5.63 9.29,4.3 12.79,4.3 C16.29,4.3 19.61,5.63 22.03,8.05 L20.62,9.46 C18.55,7.39 15.74,6.3 12.79,6.3 C9.84,6.3 7.03,7.39 4.96,9.46 L3.55,8.05 Z"/>
+</vector> 
