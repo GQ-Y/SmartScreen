@@ -13,27 +13,28 @@
     <!-- 左上角智慧屏标识 -->
     <LinearLayout
         android:id="@+id/top_left_logo"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+        android:layout_width="209dp"
+        android:layout_height="113dp"
         android:orientation="horizontal"
         android:padding="24dp"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent">
 
         <ImageView
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:src="@drawable/app_icon_your_company"
-            android:layout_marginEnd="8dp" />
+            android:layout_width="186dp"
+            android:layout_height="89dp"
+            android:layout_marginEnd="8dp"
+            android:src="@drawable/app_icon_company"
+            tools:srcCompat="@drawable/app_icon_company" />
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="智慧屏"
-            android:textColor="@android:color/white"
-            android:textSize="20sp"
-            android:textStyle="bold"
-            android:fontFamily="sans-serif-medium" />
+        <!--        <TextView-->
+        <!--            android:layout_width="wrap_content"-->
+        <!--            android:layout_height="wrap_content"-->
+        <!--            android:text="智慧屏"-->
+        <!--            android:textColor="@android:color/white"-->
+        <!--            android:textSize="20sp"-->
+        <!--            android:textStyle="bold"-->
+        <!--            android:fontFamily="sans-serif-medium" />-->
     </LinearLayout>
 
     <!-- 右上角网络状态（仅图标） -->
@@ -152,7 +153,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="自动连接智慧屏服务器或自定义配置"
+                    android:text="自动连接智慧屏云平台或自定义配置"
                     android:textColor="#E3F2FD"
                     android:textSize="18sp" />
             </LinearLayout>
@@ -208,5 +209,40 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
         android:contentDescription="@string/content_image_description" />
+
+    <!-- 音频信息覆盖层 -->
+    <LinearLayout
+        android:id="@+id/audio_info_overlay"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="#80000000"
+        android:padding="24dp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
+
+        <TextView
+            android:id="@+id/audio_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="音频标题"
+            android:textColor="@android:color/white"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            android:gravity="center"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:id="@+id/audio_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="♪ 正在播放..."
+            android:textColor="#E3F2FD"
+            android:textSize="18sp"
+            android:gravity="center" />
+
+    </LinearLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

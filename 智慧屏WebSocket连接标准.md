@@ -20,15 +20,12 @@ php bin/hyperf.php smartscreen:websocket-server --host=0.0.0.0 --port=9502
 ## 3. 连接流程
 
 ### 3.1 建立连接
-
 客户端通过WebSocket连接到服务端后，需要进行设备注册才能正常通信。
 
 ### 3.2 设备注册（自动注册优化版）
-
 连接建立后，必须首先发送注册消息：
 
 **客户端发送：**
-
 ```json
 {
   "type": "register",
@@ -38,7 +35,6 @@ php bin/hyperf.php smartscreen:websocket-server --host=0.0.0.0 --port=9502
 ```
 
 **服务端响应：**
-
 ```json
 {
   "type": "register_ack",
@@ -51,7 +47,6 @@ php bin/hyperf.php smartscreen:websocket-server --host=0.0.0.0 --port=9502
 ```
 
 **字段说明：**
-
 - `mac`: 设备MAC地址，必须唯一且已在后台注册
 - `success`: 注册是否成功
 - `active`: 设备激活状态（1=已激活，0=未激活）
@@ -62,30 +57,27 @@ php bin/hyperf.php smartscreen:websocket-server --host=0.0.0.0 --port=9502
 ### 自动注册逻辑说明
 
 1. **设备存在时**：
-
    - 更新设备在线状态
    - 更新最后在线时间
    - 返回设备当前状态
-2. **设备不存在时**：
 
+2. **设备不存在时**：
    - 自动创建新设备记录
    - 设置默认设备名称（如未提供）
    - 默认状态为未激活（status=0）
    - 设置为在线状态（is_online=1）
    - 默认播放策略为播放列表优先（display_mode=1）
-3. **设备名称规则**：
 
+3. **设备名称规则**：
    - 如果注册时提供了device_name，使用提供的名称
    - 如果未提供，自动生成格式：`SmartScreen-XXXXXXXX`（后8位为MAC地址后8位的大写）
 
 ## 4. 消息类型
 
 ### 4.1 心跳消息
-
 定期发送心跳保持连接：
 
 **客户端发送：**
-
 ```json
 {
   "type": "heartbeat",
@@ -94,7 +86,6 @@ php bin/hyperf.php smartscreen:websocket-server --host=0.0.0.0 --port=9502
 ```
 
 **服务端响应：**
-
 ```json
 {
   "type": "heartbeat_ack",
@@ -105,11 +96,9 @@ php bin/hyperf.php smartscreen:websocket-server --host=0.0.0.0 --port=9502
 ```
 
 ### 4.2 获取内容（优化版）
-
 主动获取当前应显示的内容：
 
 **客户端发送：**
-
 ```json
 {
     "type": "get_content",
@@ -118,7 +107,6 @@ php bin/hyperf.php smartscreen:websocket-server --host=0.0.0.0 --port=9502
 ```
 
 **服务端响应：**
-
 ```json
 {
     "type": "content_response",
@@ -131,8 +119,8 @@ php bin/hyperf.php smartscreen:websocket-server --host=0.0.0.0 --port=9502
         "direct_content": {
             "id": 456,
             "title": "直接内容标题",
-            "content_type": "video",
-            "content_url": "http://example.com/direct.mp4",
+            "content_type": 4,
+            "content_url": "https://live.example.com/live/stream.m3u8",
             "thumbnail": "http://example.com/direct_thumb.jpg",
             "duration": 120
         },
@@ -140,7 +128,7 @@ php bin/hyperf.php smartscreen:websocket-server --host=0.0.0.0 --port=9502
             {
                 "id": 789,
                 "title": "播放列表内容1",
-                "content_type": "image",
+                "content_type": 2,
                 "content_url": "http://example.com/playlist1.jpg",
                 "thumbnail": "http://example.com/playlist1_thumb.jpg",
                 "duration": 60,
@@ -152,10 +140,10 @@ php bin/hyperf.php smartscreen:websocket-server --host=0.0.0.0 --port=9502
             },
             {
                 "id": 790,
-                "title": "播放列表内容2",
-                "content_type": "video",
-                "content_url": "http://example.com/playlist2.mp4",
-                "thumbnail": "http://example.com/playlist2_thumb.jpg",
+                "title": "背景音乐",
+                "content_type": 5,
+                "content_url": "http://example.com/background_music.mp3",
+                "thumbnail": "http://example.com/music_thumb.jpg",
                 "duration": 180,
                 "playlist_id": 10,
                 "playlist_name": "默认播放列表",
@@ -178,7 +166,6 @@ php bin/hyperf.php smartscreen:websocket-server --host=0.0.0.0 --port=9502
 ```
 
 **响应消息 - 无内容**
-
 ```json
 {
     "type": "content_response",
@@ -204,35 +191,32 @@ php bin/hyperf.php smartscreen:websocket-server --host=0.0.0.0 --port=9502
 设备支持4种播放策略（display_mode）：
 
 1. **播放列表优先（display_mode: 1）**
-
    - primary_contents: 播放列表的所有内容
    - secondary_contents: 直接关联的内容（如果有）
+   
 2. **直接内容优先（display_mode: 2）**
-
    - primary_contents: 直接关联的内容（如果有）
    - secondary_contents: 播放列表的所有内容
+   
 3. **仅播放列表（display_mode: 3）**
-
    - primary_contents: 播放列表的所有内容
    - secondary_contents: 空
+   
 4. **仅直接内容（display_mode: 4）**
-
    - primary_contents: 直接关联的内容（如果有）
    - secondary_contents: 空
 
 ### 内容字段说明
 
 **直接内容字段（direct_content）：**
-
 - `id`: 内容ID
 - `title`: 内容标题
-- `content_type`: 内容类型
+- `content_type`: 内容类型（1=网页，2=图片，3=视频，4=直播流，5=音频）
 - `content_url`: 内容文件URL
 - `thumbnail`: 缩略图URL
 - `duration`: 播放时长（秒）
 
 **播放列表内容字段（playlist_contents）：**
-
 - 包含直接内容的所有字段，另外还有：
 - `playlist_id`: 播放列表ID
 - `playlist_name`: 播放列表名称
@@ -240,10 +224,68 @@ php bin/hyperf.php smartscreen:websocket-server --host=0.0.0.0 --port=9502
 - `playlist_sort`: 播放列表排序
 - `content_sort`: 内容在播放列表中的排序
 
+### 内容类型详细说明
+
+#### 1. 网页内容（content_type: 1）
+- 支持HTML页面、Web应用
+- 使用内置WebView渲染
+- 支持JavaScript交互
+- 示例URL：`https://example.com/page.html`
+
+#### 2. 图片内容（content_type: 2）
+- 支持JPG、PNG、GIF、WebP等格式
+- 自动缩放适配屏幕
+- 支持本地缓存
+- 示例URL：`https://example.com/image.jpg`
+
+#### 3. 视频内容（content_type: 3）
+- 支持MP4、AVI、MKV等常见视频格式
+- 使用ExoPlayer播放引擎
+- 支持硬件解码加速
+- 支持本地缓存
+- 示例URL：`https://example.com/video.mp4`
+
+#### 4. 直播流内容（content_type: 4）
+- 支持RTMP、HLS、DASH等直播协议
+- 实时流媒体播放，不支持缓存
+- 自动处理网络波动和重连
+- 低延迟播放优化
+- 示例URL：
+  - RTMP: `rtmp://live.example.com/live/stream`
+  - HLS: `https://live.example.com/live/stream.m3u8`
+  - DASH: `https://live.example.com/live/stream.mpd`
+
+#### 5. 音频内容（content_type: 5）
+- 支持MP3、AAC、FLAC、OGG等音频格式
+- 使用ExoPlayer音频引擎
+- 支持后台播放
+- 支持本地缓存
+- 显示音频播放控制界面
+- 示例URL：`https://example.com/audio.mp3`
+
+### 播放控制说明
+
+#### Duration字段控制
+- `duration > 0`: 定时播放，到达指定时长后自动切换到下一项内容
+- `duration = 0`: 永久显示，不自动切换（适用于长期展示的内容）
+- 对于直播流，duration控制观看时长
+- 对于音频，duration控制播放时长（不是音频文件本身的长度）
+
+#### 自动切换逻辑
+- 播放列表中有多项内容时，根据duration自动切换
+- 单项内容且duration=0时，永久显示不切换
+- 网络异常时自动重试播放
+- 不支持的格式自动跳过到下一项
+
+#### 缓存策略
+- **支持缓存**：图片、视频、音频、网页
+- **不支持缓存**：直播流（实时内容）
+- 缓存大小和过期时间可配置
+- 自动清理过期缓存释放存储空间
+
 ### 4.3 服务端主动推送
 
 #### 激活状态变更
-
 ```json
 {
   "type": "active_status",
@@ -253,23 +295,21 @@ php bin/hyperf.php smartscreen:websocket-server --host=0.0.0.0 --port=9502
 ```
 
 #### 内容推送
-
 ```json
 {
   "type": "push_content",
   "data": {
     "content_id": 456,
-    "title": "紧急通知",
-    "content_type": "image",
-    "content_url": "http://example.com/notice.jpg",
-    "thumbnail": "http://example.com/notice_thumb.jpg",
+    "title": "紧急直播",
+    "content_type": 4,
+    "content_url": "rtmp://live.example.com/emergency/stream",
+    "thumbnail": "http://example.com/live_thumb.jpg",
     "duration": 60
   }
 }
 ```
 
 #### 播放策略变更
-
 ```json
 {
   "type": "display_mode_change",
@@ -279,22 +319,20 @@ php bin/hyperf.php smartscreen:websocket-server --host=0.0.0.0 --port=9502
 ```
 
 **播放策略说明：**
-
 - `1`: 播放列表优先
 - `2`: 直接内容优先
 - `3`: 仅播放列表
 - `4`: 仅直接内容
 
 #### 临时内容推送
-
 ```json
 {
   "type": "temp_content",
   "data": {
     "content_id": 123,
-    "content_type": 1,
-    "content_url": "https://example.com/page.html",
-    "title": "临时内容",
+    "content_type": 5,
+    "content_url": "https://example.com/announcement.mp3",
+    "title": "临时语音通知",
     "duration": 30,
     "thumbnail": "",
     "is_temp": true
@@ -303,7 +341,6 @@ php bin/hyperf.php smartscreen:websocket-server --host=0.0.0.0 --port=9502
 ```
 
 #### 批量控制指令
-
 ```json
 {
   "type": "batch_control",
@@ -314,7 +351,6 @@ php bin/hyperf.php smartscreen:websocket-server --host=0.0.0.0 --port=9502
 ```
 
 ### 4.4 错误响应
-
 ```json
 {
   "type": "error",
@@ -325,9 +361,7 @@ php bin/hyperf.php smartscreen:websocket-server --host=0.0.0.0 --port=9502
 ## 5. 连接状态管理
 
 ### 5.1 设备内存表
-
 服务端使用 Swoole Table 维护设备连接状态：
-
 - `fd`: 连接文件描述符
 - `mac`: 设备MAC地址
 - `active`: 激活状态
@@ -335,7 +369,6 @@ php bin/hyperf.php smartscreen:websocket-server --host=0.0.0.0 --port=9502
 - `last_heartbeat`: 最后心跳时间
 
 ### 5.2 设备状态同步
-
 - 设备注册时从数据库获取真实激活状态
 - 设备激活/禁用时实时推送状态变更
 - 设备上线时更新数据库 `is_online` 和 `last_online_time`
@@ -343,14 +376,12 @@ php bin/hyperf.php smartscreen:websocket-server --host=0.0.0.0 --port=9502
 ## 6. 错误处理
 
 ### 6.1 常见错误
-
 - 消息格式错误：JSON格式不正确
 - 设备未注册：MAC地址不存在或未在后台添加
 - 设备未激活：设备状态为禁用
 - 缺少必要参数：如MAC地址等
 
 ### 6.2 连接断开
-
 - 客户端主动断开
 - 网络异常断开
 - 服务端清理断开的连接
@@ -358,13 +389,11 @@ php bin/hyperf.php smartscreen:websocket-server --host=0.0.0.0 --port=9502
 ## 7. 安全考虑
 
 ### 7.1 MAC地址验证
-
 - 必须在管理后台预先注册设备
 - MAC地址格式验证
 - 防止重复连接
 
 ### 7.2 消息过滤
-
 - 严格的消息类型检查
 - 参数有效性验证
 - 防止恶意消息
@@ -372,35 +401,29 @@ php bin/hyperf.php smartscreen:websocket-server --host=0.0.0.0 --port=9502
 ## 8. 性能优化
 
 ### 8.1 内存表
-
 使用 Swoole Table 提高连接状态查询性能
 
 ### 8.2 心跳机制
-
 定期心跳检测连接状态，及时清理无效连接
 
 ### 8.3 单进程模式
-
 当前实现为单进程模式，适用于中小规模部署。如需分布式部署，需要使用Redis等进行进程间通信。
 
 ## 9. 测试建议
 
 ### 9.1 连接测试
-
 1. 建立WebSocket连接
 2. 发送注册消息
 3. 验证响应状态
 4. 发送心跳测试
 
 ### 9.2 功能测试
-
 1. 获取内容功能
 2. 接收推送内容
 3. 状态变更通知
 4. 错误处理机制
 
 ### 9.3 压力测试
-
 1. 多设备并发连接
 2. 高频消息处理
 3. 长时间连接稳定性
@@ -425,7 +448,6 @@ php bin/hyperf.php smartscreen:websocket-server --host=0.0.0.0 --port=9502
 ### 常见错误消息
 
 #### 服务器相关错误
-
 ```json
 {
     "type": "register_ack",
@@ -435,7 +457,6 @@ php bin/hyperf.php smartscreen:websocket-server --host=0.0.0.0 --port=9502
 ```
 
 #### 设备相关错误
-
 ```json
 {
     "type": "register_ack",
@@ -463,27 +484,26 @@ php bin/hyperf.php smartscreen:websocket-server --host=0.0.0.0 --port=9502
 ### 故障排除指南
 
 1. **连接问题**
-
    - 检查WebSocket服务是否正常启动
    - 确认端口9502是否被占用
    - 检查防火墙设置
-2. **注册失败**
 
+2. **注册失败**
    - 确认MAC地址格式正确
    - 检查服务器内存表是否初始化成功
    - 查看服务器日志获取详细错误信息
-3. **获取内容失败**
 
+3. **获取内容失败**
    - 确认设备已成功注册
    - 检查设备激活状态
    - 验证设备是否关联了内容或播放列表
-4. **心跳失败**
 
+4. **心跳失败**
    - 检查网络连接是否稳定
    - 确认设备在内存表中的注册状态
    - 重新执行设备注册流程
-5. **设备显示离线但数据库显示在线**
 
+5. **设备显示离线但数据库显示在线**
    - 这是由于内存表状态与数据库状态不同步导致
    - 控制页面的在线状态基于WebSocket内存表 + 数据库状态双重判断
    - 设备需要重新连接WebSocket以同步内存表状态
@@ -503,17 +523,15 @@ php bin/hyperf.php smartscreen:websocket-server --host=0.0.0.0 --port=9502
 ### 支持的指令类型
 
 1. **基础控制指令**
-
    - `activate`：激活设备
    - `deactivate`：禁用设备
    - `refresh`：刷新设备内容
-2. **系统控制指令**
 
+2. **系统控制指令**
    - `restart`：重启设备
    - `shutdown`：关闭设备
 
 ### 系统刷新指令
-
 ```json
 {
     "type": "refresh",
@@ -522,7 +540,6 @@ php bin/hyperf.php smartscreen:websocket-server --host=0.0.0.0 --port=9502
 ```
 
 ### 批量控制指令
-
 ```json
 {
     "type": "batch_control",
@@ -533,8 +550,7 @@ php bin/hyperf.php smartscreen:websocket-server --host=0.0.0.0 --port=9502
 ```
 
 **指令说明：**
-
 - `restart`：设备将执行完全重启操作
 - `shutdown`：设备将安全关闭，需要手动重新启动
 - `message`：附带的提示消息，设备可显示给用户
-- `timestamp`：指令发送时间戳
+- `timestamp`：指令发送时间戳 

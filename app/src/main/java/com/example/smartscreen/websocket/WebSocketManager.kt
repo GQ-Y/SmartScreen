@@ -47,7 +47,7 @@ object WebSocketManager {
     private const val MAX_RETRY_DELAY_MS = 60000L // 1 minute
     
     // 智慧屏WebSocket连接标准默认配置
-    private const val DEFAULT_HOST = "localhost"
+    private const val DEFAULT_HOST = "192.168.2.45"
     private const val DEFAULT_PORT = 9502
     private const val DEFAULT_PATH = "/ws"
     private const val DEFAULT_ANDROID_EMULATOR_HOST = "10.0.2.2" // Android模拟器访问主机localhost的特殊IP
@@ -68,16 +68,29 @@ object WebSocketManager {
 
     private val client by lazy {
         OkHttpClient.Builder()
-            .pingInterval(30, TimeUnit.SECONDS)
+            .connectTimeout(15, TimeUnit.SECONDS)  // 连接超时15秒
+            .readTimeout(30, TimeUnit.SECONDS)     // 读取超时30秒
+            .writeTimeout(30, TimeUnit.SECONDS)    // 写入超时30秒
+            .pingInterval(30, TimeUnit.SECONDS)    // 心跳间隔30秒
+            .retryOnConnectionFailure(true)        // 连接失败时重试
             .build()
     }
 
     private var webSocket: WebSocket? = null
 
+    // 新增：连接模式枚举
+    public enum class ConnectMode { USER, DEFAULT }
+    private var lastTriedMode: ConnectMode = ConnectMode.USER
+
     private val webSocketListener = object : WebSocketListener() {
         override fun onOpen(webSocket: WebSocket, response: Response) {
-            Log.d(TAG, "WebSocket连接已打开")
-            retryCount = 0 // 连接成功后重置重试计数
+            Log.d(TAG, "✅ WebSocket连接已成功打开")
+            Log.d(TAG, "   连接时间: ${System.currentTimeMillis()}")
+            Log.d(TAG, "   连接模式: $lastTriedMode")
+            Log.d(TAG, "   响应码: ${response.code}")
+            Log.d(TAG, "   响应消息: ${response.message}")
+            Log.d(TAG, "   服务器协议: ${response.protocol}")
+            retryCount = 0
             listener?.get()?.onStatusChanged("Connected")
             sendRegisterMessage()
             startHeartbeat()
@@ -89,16 +102,39 @@ object WebSocketManager {
         }
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-            Log.e(TAG, "WebSocket连接失败", t)
+            Log.e(TAG, "❌ WebSocket连接失败", t)
             Log.e(TAG, "🚨 连接失败详情:")
+            Log.e(TAG, "   时间戳: ${System.currentTimeMillis()}")
             Log.e(TAG, "   异常类型: ${t.javaClass.simpleName}")
             Log.e(TAG, "   异常消息: ${t.message}")
-            Log.e(TAG, "   响应码: ${response?.code}")
-            Log.e(TAG, "   响应消息: ${response?.message}")
+            Log.e(TAG, "   异常堆栈: ${t.stackTrace.contentToString()}")
+            Log.e(TAG, "   响应码: ${response?.code ?: "无响应"}")
+            Log.e(TAG, "   响应消息: ${response?.message ?: "无响应消息"}")
+            Log.e(TAG, "   响应头: ${response?.headers ?: "无响应头"}")
+            Log.e(TAG, "   当前连接模式: $lastTriedMode")
+            Log.e(TAG, "   重试次数: $retryCount")
+            
+            // 打印网络相关信息
+            try {
+                val networkInfo = android.net.ConnectivityManager::class.java
+                Log.e(TAG, "   网络状态检查: 尝试获取网络信息...")
+            } catch (e: Exception) {
+                Log.e(TAG, "   网络状态检查失败: ${e.message}")
+            }
+            
             listener?.get()?.onStatusChanged("Disconnected")
             listener?.get()?.onError("连接失败: ${t.message}")
             stopHeartbeat()
-            scheduleReconnect()
+            // 新增：如果是用户配置失败，自动fallback到默认配置
+            val ctx = applicationContext?.get()
+            if (ctx != null && lastTriedMode == ConnectMode.USER) {
+                Log.i(TAG, "用户配置连接失败，尝试默认配置...")
+                this@WebSocketManager.webSocket = null
+                connect(ctx, ConnectMode.DEFAULT)
+            } else {
+                Log.w(TAG, "准备进行重连调度...")
+                scheduleReconnect()
+            }
         }
 
         override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
@@ -110,7 +146,6 @@ object WebSocketManager {
             Log.d(TAG, "WebSocket连接已关闭: $reason")
             listener?.get()?.onStatusChanged("Disconnected")
             stopHeartbeat()
-            // 正常关闭时不重连 (code 1000)
             if (code != 1000) {
                 scheduleReconnect()
             }
@@ -202,29 +237,34 @@ object WebSocketManager {
         }
     }
 
-    fun connect(context: Context) {
-        // 存储上下文用于重连
+    fun connect(context: Context, mode: ConnectMode = ConnectMode.USER) {
+        Log.d(TAG, "开始WebSocket连接尝试")
+        Log.d(TAG, "   连接模式: $mode")
+        Log.d(TAG, "   当前时间: ${System.currentTimeMillis()}")
+        
         this.applicationContext = WeakReference(context.applicationContext)
-
-        // 在开始新连接前取消任何待处理的重连尝试
         connectionHandler.removeCallbacksAndMessages(null)
-
         if (webSocket != null) {
             Log.d(TAG, "已连接或正在连接中")
             return
         }
         listener?.get()?.onStatusChanged("Connecting")
 
-        // 获取配置信息
         val sharedPrefs = context.getSharedPreferences(SettingsActivity.PREFS_NAME, Context.MODE_PRIVATE)
-        var ip = sharedPrefs.getString(SettingsActivity.KEY_SERVER_IP, null)
-        var port = sharedPrefs.getInt(SettingsActivity.KEY_SERVER_PORT, 0)
-
-        // 根据智慧屏WebSocket连接标准使用默认配置
-        val useDefaultConfig = ip.isNullOrBlank() || port == 0
-        if (useDefaultConfig) {
-            Log.d(TAG, "未找到用户配置，使用智慧屏WebSocket连接标准默认配置")
-            // 检测是否在Android模拟器环境 - 改进检测逻辑
+        var ip: String? = null
+        var port: Int = 0
+        var useDefaultConfig = false
+        
+        Log.d(TAG, "📋 读取配置信息...")
+        if (mode == ConnectMode.USER) {
+            ip = sharedPrefs.getString(SettingsActivity.KEY_SERVER_IP, null)
+            port = sharedPrefs.getInt(SettingsActivity.KEY_SERVER_PORT, 0)
+            useDefaultConfig = ip.isNullOrBlank() || port == 0
+            Log.d(TAG, "   用户配置 - IP: '$ip', 端口: $port")
+            Log.d(TAG, "   IP为空或端口为0: $useDefaultConfig")
+        }
+        if (mode == ConnectMode.DEFAULT || useDefaultConfig) {
+            Log.d(TAG, "未找到用户配置或已指定默认模式，使用智慧屏WebSocket连接标准默认配置")
             val isEmulator = Build.FINGERPRINT.contains("generic") || 
                            Build.MODEL.contains("Emulator") ||
                            Build.MODEL.contains("Android SDK") ||
@@ -234,19 +274,7 @@ object WebSocketManager {
                            Build.PRODUCT.contains("sdk") ||
                            Build.HARDWARE.contains("goldfish") ||
                            Build.HARDWARE.contains("ranchu")
-            
-            Log.d(TAG, "🔍 环境检测详情:")
-            Log.d(TAG, "   Build.FINGERPRINT: ${Build.FINGERPRINT}")
-            Log.d(TAG, "   Build.MODEL: ${Build.MODEL}")
-            Log.d(TAG, "   Build.BRAND: ${Build.BRAND}")
-            Log.d(TAG, "   Build.DEVICE: ${Build.DEVICE}")
-            Log.d(TAG, "   Build.PRODUCT: ${Build.PRODUCT}")
-            Log.d(TAG, "   Build.HARDWARE: ${Build.HARDWARE}")
-            Log.d(TAG, "   检测结果: ${if (isEmulator) "模拟器" else "真机"}")
-            
-            // 临时强制使用模拟器地址进行调试
             val forceEmulatorAddress = true // 调试时设为true，发布时改为false
-            
             ip = if (isEmulator || forceEmulatorAddress) {
                 val selectedHost = DEFAULT_ANDROID_EMULATOR_HOST
                 Log.d(TAG, "✅ 使用模拟器专用地址: $selectedHost ${if (forceEmulatorAddress) "(强制)" else "(检测)"}")
@@ -256,35 +284,30 @@ object WebSocketManager {
                 DEFAULT_HOST
             }
             port = DEFAULT_PORT
-            
             Log.d(TAG, "默认配置 - 主机: $ip, 端口: $port, 路径: $DEFAULT_PATH")
         } else {
             Log.d(TAG, "使用用户配置 - 主机: $ip, 端口: $port")
         }
-
-        // 构建WebSocket URL，确保符合智慧屏连接标准
+        
+        Log.d(TAG, "🔗 构建WebSocket连接URL...")
+        Log.d(TAG, "   最终IP: '$ip'")
+        Log.d(TAG, "   最终端口: $port")
+        Log.d(TAG, "   路径: '$DEFAULT_PATH'")
         val url = "ws://$ip:$port$DEFAULT_PATH"
         Log.d(TAG, "正在连接到智慧屏WebSocket服务器: $url")
         
-        // 详细调试信息
-        Log.d(TAG, "🔍 连接参数详情:")
-        Log.d(TAG, "   IP地址: '$ip'")
-        Log.d(TAG, "   端口: $port")
-        Log.d(TAG, "   路径: '$DEFAULT_PATH'")
-        Log.d(TAG, "   完整URL: '$url'")
-        Log.d(TAG, "   使用默认配置: $useDefaultConfig")
-        
-        if (useDefaultConfig) {
-            Log.i(TAG, "📡 使用智慧屏WebSocket连接标准默认配置连接")
-            Log.i(TAG, "   默认地址: ws://$DEFAULT_HOST:$DEFAULT_PORT$DEFAULT_PATH")
-            Log.i(TAG, "   实际连接: $url")
-        } else {
-            Log.i(TAG, "📡 使用用户自定义配置连接: $url")
-        }
-
+        Log.d(TAG, "🌐 创建OkHttp请求...")
         val request = Request.Builder().url(url).build()
-        Log.d(TAG, "🌐 OkHttp请求URL: ${request.url}")
+        Log.d(TAG, "   请求URL: ${request.url}")
+        Log.d(TAG, "   请求协议: ${request.url.scheme}")
+        Log.d(TAG, "   请求主机: ${request.url.host}")
+        Log.d(TAG, "   请求端口: ${request.url.port}")
+        Log.d(TAG, "   请求路径: ${request.url.encodedPath}")
+        
+        Log.d(TAG, "🔌 启动WebSocket连接...")
         webSocket = client.newWebSocket(request, webSocketListener)
+        lastTriedMode = mode
+        Log.d(TAG, "✅ WebSocket连接请求已发送，等待响应...")
     }
 
     fun disconnect() {
@@ -328,11 +351,11 @@ object WebSocketManager {
     private fun scheduleReconnect() {
         val delay = (INITIAL_RETRY_DELAY_MS * (1 shl retryCount.coerceAtMost(6))).coerceAtMost(MAX_RETRY_DELAY_MS)
         Log.d(TAG, "计划第${retryCount + 1}次重连尝试，延迟${delay / 1000}秒")
-
         connectionHandler.postDelayed({
             Log.d(TAG, "执行第${retryCount + 1}次重连尝试")
             applicationContext?.get()?.let {
-                connect(it)
+                // 每次重连都先尝试用户配置
+                connect(it, ConnectMode.USER)
             } ?: run {
                 Log.e(TAG, "无法重连，上下文为空")
             }

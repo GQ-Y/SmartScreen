@@ -7,9 +7,12 @@ import android.os.Looper
 import android.util.Log
 import android.view.View
 import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.TextView
 import androidx.core.net.toUri
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import androidx.media3.common.PlaybackException
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import com.bumptech.glide.Glide
@@ -17,14 +20,166 @@ import com.bumptech.glide.load.engine.DiskCacheStrategy
 import com.bumptech.glide.request.RequestOptions
 import com.example.smartscreen.ui.X5WebView
 import com.example.smartscreen.websocket.Content
+import androidx.media3.exoplayer.rtsp.RtspMediaSource
+import androidx.media3.exoplayer.source.MediaSource
+import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.common.C
 
 class PlayerManager(
     private val context: Context,
     private val playerView: PlayerView,
     private val webView: X5WebView,
-    private val imageView: ImageView
+    private val imageView: ImageView,
+    private val audioInfoOverlay: LinearLayout,
+    private val audioTitle: TextView,
+    private val audioStatus: TextView
 ) {
     private val handler = Handler(Looper.getMainLooper())
+    private var nextContentTask: Runnable? = null
+    
+    /**
+     * 隐藏所有视图
+     */
+    private fun hideAllViews() {
+        playerView.visibility = View.GONE
+        webView.visibility = View.GONE
+        imageView.visibility = View.GONE
+        audioInfoOverlay.visibility = View.GONE
+    }
+    
+    /**
+     * 检查并设置音频循环播放
+     */
+    private fun checkAndSetupAudioLooping(content: Content) {
+        val duration = content.duration
+        val isOnlyAudioContent = playlist.size == 1 && playlist[0].contentType == 5.0
+        
+        Log.d("PlayerManager", "音频循环检查: 播放策略时长=${duration}秒, 仅音频内容=${isOnlyAudioContent}")
+        
+        // 设置播放器监听器来获取音频实际时长
+        exoPlayer?.addListener(object : Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                if (playbackState == Player.STATE_READY) {
+                    val audioDurationMs = exoPlayer?.duration ?: 0L
+                    val audioDurationSec = audioDurationMs / 1000.0
+                    
+                    Log.d("PlayerManager", "音频实际时长: ${audioDurationSec}秒")
+                    
+                    val shouldLoop = when {
+                        // 永久播放策略（仅在只有音频内容时）
+                        duration == 0.0 && isOnlyAudioContent -> {
+                            Log.d("PlayerManager", "检测到永久播放策略且仅有音频内容，启用循环播放")
+                            true
+                        }
+                        // 播放策略时间大于音频总时长
+                        duration > audioDurationSec -> {
+                            Log.d("PlayerManager", "播放策略时长(${duration}秒) > 音频时长(${audioDurationSec}秒)，启用循环播放")
+                            true
+                        }
+                        else -> {
+                            Log.d("PlayerManager", "使用正常播放模式，不循环")
+                            false
+                        }
+                    }
+                    
+                    if (shouldLoop) {
+                        // 启用循环播放
+                        exoPlayer?.repeatMode = Player.REPEAT_MODE_ONE
+                        // 更新音频状态显示
+                        if (audioInfoOverlay.visibility == View.VISIBLE) {
+                            audioStatus.text = "♪ 循环播放中..."
+                        }
+                        Log.d("PlayerManager", "已启用音频循环播放")
+                        
+                        // 根据播放策略设置切换时间
+                        if (duration > 0) {
+                            scheduleNext(duration)
+                        }
+                        // 如果是永久播放(duration=0)，则不设置切换时间
+                    } else {
+                        // 正常播放，不循环
+                        exoPlayer?.repeatMode = Player.REPEAT_MODE_OFF
+                        scheduleNext(duration)
+                    }
+                    
+                    // 移除监听器，避免重复触发
+                    exoPlayer?.removeListener(this)
+                }
+            }
+            
+            override fun onPlayerError(error: PlaybackException) {
+                Log.e("PlayerManager", "音频播放错误: ${error.message}")
+                exoPlayer?.removeListener(this)
+                skipToNext()
+            }
+        })
+    }
+    
+    /**
+     * 检查并设置视频循环播放
+     */
+    private fun checkAndSetupVideoLooping(content: Content) {
+        val duration = content.duration
+        
+        Log.d("PlayerManager", "视频循环检查: 播放策略时长=${duration}秒")
+        
+        // 设置播放器监听器来监听视频播放完成
+        exoPlayer?.addListener(object : Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                if (playbackState == Player.STATE_READY) {
+                    val videoDurationMs = exoPlayer?.duration ?: 0L
+                    val videoDurationSec = videoDurationMs / 1000.0
+                    
+                    Log.d("PlayerManager", "视频实际时长: ${videoDurationSec}秒")
+                    
+                    val shouldLoop = when {
+                        // 永久播放策略
+                        duration == 0.0 -> {
+                            Log.d("PlayerManager", "检测到永久播放策略，启用视频循环播放")
+                            true
+                        }
+                        // 播放策略时间大于视频总时长
+                        duration > videoDurationSec -> {
+                            Log.d("PlayerManager", "播放策略时长(${duration}秒) > 视频时长(${videoDurationSec}秒)，启用视频循环播放")
+                            true
+                        }
+                        else -> {
+                            Log.d("PlayerManager", "使用正常播放模式，不循环")
+                            false
+                        }
+                    }
+                    
+                    if (shouldLoop) {
+                        // 启用循环播放
+                        exoPlayer?.repeatMode = Player.REPEAT_MODE_ONE
+                        Log.d("PlayerManager", "已启用视频循环播放")
+                        
+                        // 根据播放策略设置切换时间
+                        if (duration > 0) {
+                            scheduleNext(duration)
+                        }
+                        // 如果是永久播放(duration=0)，则不设置切换时间
+                    } else {
+                        // 正常播放，不循环
+                        exoPlayer?.repeatMode = Player.REPEAT_MODE_OFF
+                        scheduleNext(duration)
+                    }
+                    
+                    // 移除监听器，避免重复触发
+                    exoPlayer?.removeListener(this)
+                }
+            }
+            
+            override fun onPlayerError(error: PlaybackException) {
+                Log.e("PlayerManager", "视频播放错误: ${error.message}")
+                exoPlayer?.removeListener(this)
+                skipToNext()
+            }
+        })
+    }
+    
+    // ExoPlayer实例
     private var exoPlayer: ExoPlayer? = null
     private var playlist: List<Content> = emptyList()
     private var currentIndex = -1
@@ -32,6 +187,11 @@ class PlayerManager(
     // 缓存管理器
     private val cacheManager = ContentCacheManager(context)
 
+    private var retryCount = 0
+    private val maxRetryCount = 3
+    
+    private var useUdpTransport = false // 传输方式切换标志
+    
     init {
         initializePlayer()
     }
@@ -44,18 +204,32 @@ class PlayerManager(
                 repeatMode = ExoPlayer.REPEAT_MODE_OFF
                 addListener(object : Player.Listener {
                     override fun onPlaybackStateChanged(playbackState: Int) {
-                        Log.d("PlayerManager", "视频播放状态变化: $playbackState")
-                        // 不再根据视频播放结束自动切换，完全由duration字段控制
-                        // 如果需要循环播放单个视频，可以设置repeatMode
-                        if (playbackState == Player.STATE_ENDED) {
-                            // 如果是单个内容且duration为0，循环播放
-                            if (playlist.size == 1 && currentIndex >= 0 && currentIndex < playlist.size) {
-                                val content = playlist[currentIndex]
-                                if (content.duration <= 0.0) {
-                                    Log.d("PlayerManager", "单个视频内容duration为0，重新播放")
-                                    exoPlayer?.seekTo(0)
-                                    exoPlayer?.play()
-                                }
+                        Log.d("PlayerManager", "播放状态变化: $playbackState")
+                        // 播放状态变化时的通用处理
+                        // 具体的循环逻辑由各自的内容类型处理方法管理
+                    }
+                    
+                    override fun onPlayerError(error: PlaybackException) {
+                        Log.e("PlayerManager", "播放错误: ${error.message}", error)
+                        Log.e("PlayerManager", "错误代码: ${error.errorCode}")
+                        Log.e("PlayerManager", "错误类型: ${error.javaClass.simpleName}")
+                        
+                        // 特殊处理RTSP错误
+                        if (error.message?.contains("RTSP") == true || error.message?.contains("SETUP") == true) {
+                            Log.e("PlayerManager", "RTSP协议错误，尝试不同的传输方式")
+                            retryWithDifferentConfig()
+                            return
+                        }
+                        
+                        when (error.errorCode) {
+                            PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
+                            PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT -> {
+                                Log.w("PlayerManager", "网络连接问题，尝试重新播放")
+                                retryCurrentContent()
+                            }
+                            else -> {
+                                Log.e("PlayerManager", "播放失败，跳过当前内容")
+                                skipToNext()
                             }
                         }
                     }
@@ -150,6 +324,11 @@ class PlayerManager(
             return
         }
 
+        // 重置重试计数
+        retryCount = 0
+        // 重置传输方式，从TCP开始
+        useUdpTransport = false
+        
         val content = playlist[currentIndex]
         Log.d("PlayerManager", "播放第${currentIndex + 1}/${playlist.size}项内容")
         
@@ -165,9 +344,10 @@ class PlayerManager(
         Log.d("PlayerManager", "内容详情: 类型=${correctedContent.contentType} -> $normalizedType, 时长=${correctedContent.duration}秒, URL=${correctedContent.contentUrl}")
 
         // Hide all views initially, then show the correct one
-        playerView.visibility = View.GONE
-        webView.visibility = View.GONE
-        imageView.visibility = View.GONE
+        hideAllViews()
+        
+        // 重置循环模式
+        exoPlayer?.repeatMode = Player.REPEAT_MODE_OFF
 
         // Cancel any pending timed transitions from previous content
         handler.removeCallbacksAndMessages(null)
@@ -178,19 +358,16 @@ class PlayerManager(
         when (normalizedType) {
             "web" -> {
                 if (correctedContent.contentUrl.isBlank()) {
-                    Log.e("PlayerManager", "跳过空白URL的网页内容")
+                    Log.e("PlayerManager", "跳过空白URL的Web内容")
                     skipToNext()
                     return
                 }
                 
-                // 检查缓存状态
-                val cacheStatus = cacheManager.getCacheStatus(correctedContent.contentUrl)
-                Log.d("PlayerManager", "网页缓存状态: $cacheStatus")
-                
-                // 使用X5WebView播放网页内容
+                // Web内容
+                hideAllViews()
                 webView.visibility = View.VISIBLE
                 webView.loadUrl(correctedContent.contentUrl)
-                Log.d("PlayerManager", "✅ 开始播放网页内容，持续时间: ${correctedContent.duration}秒 ${if (cacheStatus == ContentCacheManager.CacheStatus.CACHED) "(已缓存)" else "(网络加载)"}")
+                Log.d("PlayerManager", "✅ 开始显示Web内容，持续时间: ${correctedContent.duration}秒")
                 scheduleNext(correctedContent.duration)
             }
             "image" -> {
@@ -199,26 +376,32 @@ class PlayerManager(
                     skipToNext()
                     return
                 }
+                
+                // 图片内容
+                hideAllViews()
                 imageView.visibility = View.VISIBLE
                 
-                // 检查缓存状态
-                val cacheStatus = cacheManager.getCacheStatus(correctedContent.contentUrl)
-                Log.d("PlayerManager", "图片缓存状态: $cacheStatus")
-                
-                // 使用Glide加载图片，启用缓存
+                // 加载图片
                 Glide.with(context)
                     .load(correctedContent.contentUrl)
                     .apply(RequestOptions().diskCacheStrategy(DiskCacheStrategy.ALL))
                     .into(imageView)
-                    
-                Log.d("PlayerManager", "✅ 开始显示图片内容，持续时间: ${correctedContent.duration}秒 ${if (cacheStatus == ContentCacheManager.CacheStatus.CACHED) "(已缓存)" else "(网络加载)"}")
+                Log.d("PlayerManager", "✅ 开始显示图片内容，持续时间: ${correctedContent.duration}秒")
                 scheduleNext(correctedContent.duration)
             }
-            "video", "rtsp" -> {
+            "video" -> {
+                if (correctedContent.contentUrl.isBlank()) {
+                    Log.e("PlayerManager", "跳过空白URL的视频内容")
+                    skipToNext()
+                    return
+                }
+                
                 // 检查缓存状态
                 val cacheStatus = cacheManager.getCacheStatus(correctedContent.contentUrl)
                 Log.d("PlayerManager", "视频缓存状态: $cacheStatus")
                 
+                // 视频播放
+                hideAllViews()
                 playerView.visibility = View.VISIBLE
                 val mediaItem = buildMediaItem(correctedContent)
                 if (mediaItem != null) {
@@ -226,10 +409,112 @@ class PlayerManager(
                     exoPlayer?.prepare()
                     exoPlayer?.play()
                     Log.d("PlayerManager", "✅ 开始播放视频内容，持续时间: ${correctedContent.duration}秒 ${if (cacheStatus == ContentCacheManager.CacheStatus.CACHED) "(已缓存)" else "(网络加载)"}")
-                    // 视频也遵循duration字段控制，而不是视频本身的长度
+                    
+                    // 检查是否需要循环播放视频
+                    checkAndSetupVideoLooping(correctedContent)
+                } else {
+                    Log.e("PlayerManager", "无法为以下URL构建视频媒体项: ${correctedContent.contentUrl}")
+                    skipToNext()
+                }
+            }
+            "rtsp" -> {
+                // 检查缓存状态
+                val cacheStatus = cacheManager.getCacheStatus(correctedContent.contentUrl)
+                Log.d("PlayerManager", "RTSP缓存状态: $cacheStatus")
+                
+                // RTSP直播流播放
+                hideAllViews()
+                playerView.visibility = View.VISIBLE
+                val mediaItem = buildMediaItem(correctedContent)
+                if (mediaItem != null) {
+                    exoPlayer?.setMediaItem(mediaItem)
+                    exoPlayer?.prepare()
+                    exoPlayer?.play()
+                    Log.d("PlayerManager", "✅ 开始播放RTSP直播流，持续时间: ${correctedContent.duration}秒")
                     scheduleNext(correctedContent.duration)
                 } else {
-                    Log.e("PlayerManager", "无法为以下URL构建媒体项: ${correctedContent.contentUrl}")
+                    Log.e("PlayerManager", "无法为以下URL构建视频媒体项: ${correctedContent.contentUrl}")
+                    skipToNext()
+                }
+            }
+            "live_stream" -> {
+                if (correctedContent.contentUrl.isBlank()) {
+                    Log.e("PlayerManager", "跳过空白URL的直播流内容")
+                    skipToNext()
+                    return
+                }
+                
+                Log.d("PlayerManager", "直播流内容不支持缓存，直接播放")
+                Log.d("PlayerManager", "RTSP URL: ${correctedContent.contentUrl}")
+                
+                // 直播流播放
+                hideAllViews()
+                playerView.visibility = View.VISIBLE
+                val mediaSource = buildRtspMediaSource(correctedContent)
+                if (mediaSource != null) {
+                    exoPlayer?.setMediaSource(mediaSource)
+                    exoPlayer?.prepare()
+                    exoPlayer?.play()
+                    Log.d("PlayerManager", "✅ 开始播放直播流内容，持续时间: ${correctedContent.duration}秒 (实时流)")
+                    // 直播流也遵循duration字段控制
+                    scheduleNext(correctedContent.duration)
+                } else {
+                    Log.e("PlayerManager", "无法为以下URL构建直播流媒体项: ${correctedContent.contentUrl}")
+                    skipToNext()
+                }
+            }
+            "audio" -> {
+                if (correctedContent.contentUrl.isBlank()) {
+                    Log.e("PlayerManager", "跳过空白URL的音频内容")
+                    skipToNext()
+                    return
+                }
+                
+                // 检查缓存状态
+                val cacheStatus = cacheManager.getCacheStatus(correctedContent.contentUrl)
+                Log.d("PlayerManager", "音频缓存状态: $cacheStatus")
+                
+                // 检查是否有封面图片
+                val hasThumbnail = !correctedContent.thumbnail.isNullOrBlank()
+                Log.d("PlayerManager", "音频封面状态: ${if (hasThumbnail) "有封面" else "无封面"}")
+                
+                if (hasThumbnail) {
+                    // 有封面时，显示封面图片，音频在后台播放
+                    hideAllViews()
+                    imageView.visibility = View.VISIBLE
+                    audioInfoOverlay.visibility = View.VISIBLE
+                    
+                    // 加载封面图片
+                    Glide.with(context)
+                        .load(correctedContent.thumbnail)
+                        .apply(RequestOptions().diskCacheStrategy(DiskCacheStrategy.ALL))
+                        .into(imageView)
+                    
+                    // 设置音频信息
+                    audioTitle.text = correctedContent.title.ifBlank { "未知音频" }
+                    audioStatus.text = "♪ 正在播放..."
+                    
+                    Log.d("PlayerManager", "显示音频封面: ${correctedContent.thumbnail}")
+                } else {
+                    // 无封面时，显示音频播放控制界面
+                    hideAllViews()
+                    playerView.visibility = View.VISIBLE
+                    Log.d("PlayerManager", "显示音频播放控制界面")
+                }
+                
+                // 开始播放音频（后台播放）
+                val mediaItem = buildMediaItem(correctedContent)
+                if (mediaItem != null) {
+                    exoPlayer?.setMediaItem(mediaItem)
+                    exoPlayer?.prepare()
+                    exoPlayer?.play()
+                    val displayMode = if (hasThumbnail) "封面显示" else "控制界面"
+                    Log.d("PlayerManager", "✅ 开始播放音频内容($displayMode)，持续时间: ${correctedContent.duration}秒 ${if (cacheStatus == ContentCacheManager.CacheStatus.CACHED) "(已缓存)" else "(网络加载)"}")
+                    
+                    // 检查是否需要循环播放
+                    checkAndSetupAudioLooping(correctedContent)
+                } else {
+                    Log.e("PlayerManager", "无法为以下URL构建音频媒体项: ${correctedContent.contentUrl}")
                     skipToNext()
                 }
             }
@@ -242,7 +527,7 @@ class PlayerManager(
 
     /**
      * Normalizes contentType from the server, which can be a number or a string.
-     * We assume a convention here: 1.0=video, 2.0=image, 3.0=web
+     * We assume a convention here: 1.0=web, 2.0=image, 3.0=video, 4.0=live_stream, 5.0=audio
      */
     private fun normalizeContentType(type: Any): String {
         return when (type) {
@@ -252,6 +537,8 @@ class PlayerManager(
                     1.0 -> "web"
                     2.0 -> "image"
                     3.0 -> "video"
+                    4.0 -> "live_stream"
+                    5.0 -> "audio"
                     // Add other mappings as needed
                     else -> "unknown"
                 }
@@ -262,6 +549,8 @@ class PlayerManager(
                     1 -> "web"
                     2 -> "image"
                     3 -> "video"
+                    4 -> "live_stream"
+                    5 -> "audio"
                     else -> "unknown"
                 }
             }
@@ -341,7 +630,8 @@ class PlayerManager(
         }
         val uri = correctedUrl.toUri()
         return when (normalizeContentType(content.contentType)) {
-            "video", "rtsp" -> MediaItem.fromUri(uri)
+            "video", "audio" -> MediaItem.fromUri(uri)
+            "rtsp" -> MediaItem.fromUri(uri) // 保留向后兼容
             // Image and other types are not ExoPlayer media items
             else -> null
         }
@@ -381,5 +671,71 @@ class PlayerManager(
      */
     fun getContentCacheStatus(contentUrl: String): ContentCacheManager.CacheStatus {
         return cacheManager.getCacheStatus(contentUrl)
+    }
+
+    private fun retryCurrentContent() {
+        if (retryCount < maxRetryCount && currentIndex >= 0 && currentIndex < playlist.size) {
+            retryCount++
+            Log.d("PlayerManager", "第${retryCount}次重试播放当前内容")
+            handler.postDelayed({
+                playCurrent()
+            }, 2000) // 2秒后重试
+        } else {
+            Log.e("PlayerManager", "重试次数已达上限，跳过当前内容")
+            retryCount = 0
+            skipToNext()
+        }
+    }
+
+    private fun retryWithDifferentConfig() {
+        if (retryCount < maxRetryCount && currentIndex >= 0 && currentIndex < playlist.size) {
+            retryCount++
+            useUdpTransport = !useUdpTransport // 切换传输方式
+            Log.d("PlayerManager", "第${retryCount}次重试，切换传输方式为: ${if (useUdpTransport) "UDP" else "TCP"}")
+            handler.postDelayed({
+                playCurrent()
+            }, 3000) // 3秒后重试，给更多时间
+        } else {
+            Log.e("PlayerManager", "重试次数已达上限，跳过当前内容")
+            retryCount = 0
+            useUdpTransport = false // 重置传输方式
+            skipToNext()
+        }
+    }
+
+    @UnstableApi
+    private fun buildRtspMediaSource(content: Content): MediaSource? {
+        if (content.contentUrl.isBlank()) {
+            return null
+        }
+        
+        val correctedUrl = if (content.contentUrl.contains("127.0.0.1")) {
+            content.contentUrl.replace("127.0.0.1", "10.0.2.2")
+        } else {
+            content.contentUrl
+        }
+        
+        return try {
+            Log.d("PlayerManager", "构建RTSP媒体源: $correctedUrl")
+            
+            // 检查URL是否包含认证信息
+            val hasAuth = correctedUrl.contains("@")
+            if (hasAuth) {
+                Log.d("PlayerManager", "检测到RTSP认证信息")
+            }
+            
+            Log.d("PlayerManager", "使用传输方式: ${if (useUdpTransport) "UDP" else "TCP"}")
+            Log.d("PlayerManager", "重试次数: $retryCount")
+            
+            // 创建RTSP媒体源，设置超时和重试参数
+            RtspMediaSource.Factory()
+                .setTimeoutMs(15000) // 15秒超时，给认证更多时间
+                .setForceUseRtpTcp(!useUdpTransport) // 根据标志切换传输方式
+                .setDebugLoggingEnabled(true) // 启用调试日志
+                .createMediaSource(MediaItem.fromUri(correctedUrl))
+        } catch (e: Exception) {
+            Log.e("PlayerManager", "构建RTSP媒体源失败: ${e.message}", e)
+            null
+        }
     }
 } 

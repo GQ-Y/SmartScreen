@@ -70,7 +70,12 @@ class MainActivity : AppCompatActivity(), WebSocketManager.WebSocketListenerEven
         copyrightText = findViewById(R.id.copyright_text)
         imageView = findViewById(R.id.image_view)
         guideLayout = findViewById(R.id.guide_layout)
-        playerManager = PlayerManager(this, playerView, webView, imageView)
+        
+        // 音频信息覆盖层
+        val audioInfoOverlay = findViewById<LinearLayout>(R.id.audio_info_overlay)
+        val audioTitle = findViewById<TextView>(R.id.audio_title)
+        val audioStatus = findViewById<TextView>(R.id.audio_status)
+        playerManager = PlayerManager(this, playerView, webView, imageView, audioInfoOverlay, audioTitle, audioStatus)
 
         // 设置固定的欢迎文本
         typewriterTextView.text = "任意屏，任意门，任意显示"
@@ -96,11 +101,12 @@ class MainActivity : AppCompatActivity(), WebSocketManager.WebSocketListenerEven
                             val hasInternet = capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
                             val isValidated = capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
                             Log.d("网络检查", "onAvailable: 具有INTERNET能力: $hasInternet, 具有VALIDATED能力: $isValidated")
-                            if (isValidated) {
+                            if (hasInternet) {
                                 isDeviceNetworkConnected = true
                                 runOnUiThread {
                                     updateDeviceNetworkStatusUI()
                                     // 如果网络可用，尝试连接WebSocket
+                                    Log.d("网络检查", "onAvailable: 网络具有INTERNET能力，尝试连接WebSocket")
                                     WebSocketManager.connect(this@MainActivity)
                                 }
                             }
@@ -127,12 +133,13 @@ class MainActivity : AppCompatActivity(), WebSocketManager.WebSocketListenerEven
                     Log.d("网络检查", "onCapabilitiesChanged: 网络: $network, 具有INTERNET能力: $hasInternet, 具有VALIDATED能力: $isValidated")
 
                     val oldState = isDeviceNetworkConnected
-                    isDeviceNetworkConnected = isValidated
-                    if (oldState != isValidated) {
+                    isDeviceNetworkConnected = hasInternet
+                    if (oldState != hasInternet) {
                         runOnUiThread {
                             updateDeviceNetworkStatusUI()
-                            if (isValidated) {
+                            if (hasInternet) {
                                 // 如果网络变为可用，尝试连接WebSocket
+                                Log.d("网络检查", "onCapabilitiesChanged: 网络具有INTERNET能力，尝试连接WebSocket")
                                 WebSocketManager.connect(this@MainActivity)
                             }
                         }
@@ -173,7 +180,7 @@ class MainActivity : AppCompatActivity(), WebSocketManager.WebSocketListenerEven
                     val hasInternet = capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
                     val isValidated = capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
                     Log.d("网络检查", "checkInitialNetworkState: 具有INTERNET能力: $hasInternet, 具有VALIDATED能力: $isValidated")
-                    isDeviceNetworkConnected = isValidated
+                    isDeviceNetworkConnected = hasInternet
                 } else {
                     Log.d("网络检查", "checkInitialNetworkState: 发现活动网络，但网络能力为空")
                     isDeviceNetworkConnected = false
@@ -195,6 +202,7 @@ class MainActivity : AppCompatActivity(), WebSocketManager.WebSocketListenerEven
             Log.d("网络检查", "checkInitialNetworkState: 使用连接状态更新UI: $isDeviceNetworkConnected")
             updateDeviceNetworkStatusUI()
             if (isDeviceNetworkConnected) {
+                Log.d("网络检查", "checkInitialNetworkState: 网络可用，尝试连接WebSocket")
                 WebSocketManager.connect(this)
             }
         }
@@ -397,9 +405,9 @@ class MainActivity : AppCompatActivity(), WebSocketManager.WebSocketListenerEven
         } else {
             // 显示连接状态
             val statusMessage = if (hasUserConfig) {
-                "连接失败 (用户配置)"
+                "连接失败"
             } else {
-                "连接失败 (默认配置)"
+                "连接失败"
             }
             updateWebSocketStatusUI(statusMessage)
         }
