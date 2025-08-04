@@ -37,7 +37,7 @@ class X5WebView @JvmOverloads constructor(
             
             // 基本设置
             val webSettings = settings
-            webSettings.javaScriptEnabled = true
+//            webSettings.javaScriptEnabled = true
             webSettings.domStorageEnabled = true
             webSettings.allowFileAccess = true
             webSettings.allowContentAccess = true
