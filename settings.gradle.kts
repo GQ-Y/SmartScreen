@@ -19,5 +19,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Smart Screen"
+rootProject.name = "智慧屏"
 include(":app")

@@ -21,18 +21,15 @@
         android:name=".SmartScreenApplication"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
-        android:label="@string/app_name"
-        android:banner="@drawable/leanback_banner"
+        android:label="智慧屏"
+        android:banner="@drawable/tv_banner"
         android:supportsRtl="true"
         android:theme="@style/Theme.SmartScreen"
         android:usesCleartextTraffic="true">
         <activity
             android:name=".ui.MainActivity"
-            android:banner="@drawable/app_icon_company"
             android:exported="true"
-            android:icon="@drawable/app_icon_company"
-            android:label="@string/app_name"
-            android:logo="@drawable/app_icon_company"
+            android:label="智慧屏"
             android:screenOrientation="unspecified"
             android:hardwareAccelerated="true">
             <intent-filter>

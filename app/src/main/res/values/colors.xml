@@ -23,4 +23,7 @@
     <!-- Text Colors -->
     <color name="text_primary">#FFFFFF</color>
     <color name="text_secondary">#B0B0B0</color>
+    
+    <!-- Splash background for Android 12+ -->
+    <color name="splash_background">#3662EC</color>
 </resources>
