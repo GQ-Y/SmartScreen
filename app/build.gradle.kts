@@ -11,9 +11,37 @@ android {
         applicationId = "com.example.smartscreen"
         minSdk = 21
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.0.1"
 
+    }
+
+    // 签名配置：优先从 Gradle 属性或环境变量读取；可选回落到 debug keystore（仅限内测）
+    signingConfigs {
+        create("release") {
+            val prop = { key: String ->
+                (project.findProperty(key) as String?) ?: System.getenv(key)
+            }
+
+            val storeFilePath = prop("RELEASE_STORE_FILE")
+            val storePassword = prop("RELEASE_STORE_PASSWORD")
+            val keyAlias = prop("RELEASE_KEY_ALIAS")
+            val keyPassword = prop("RELEASE_KEY_PASSWORD")
+
+            if (!storeFilePath.isNullOrBlank() && !storePassword.isNullOrBlank() && !keyAlias.isNullOrBlank() && !keyPassword.isNullOrBlank()) {
+                storeFile = file(storeFilePath)
+                this.storePassword = storePassword
+                this.keyAlias = keyAlias
+                this.keyPassword = keyPassword
+            } else if ((project.findProperty("USE_DEBUG_FOR_RELEASE") as String?).equals("true", ignoreCase = true)) {
+                // 使用本机 debug.keystore 签名（仅用于内测，不可用于线上发布）
+                val home = System.getProperty("user.home")
+                storeFile = file("$home/.android/debug.keystore")
+                this.storePassword = "android"
+                this.keyAlias = "androiddebugkey"
+                this.keyPassword = "android"
+            }
+        }
     }
 
     buildTypes {
@@ -23,6 +51,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions {

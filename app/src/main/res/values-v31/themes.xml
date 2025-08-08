@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12+ 启动画面自定义，避免系统默认的空白/白块图标 -->
+    <style name="Theme.SmartScreen" parent="@style/Theme.AppCompat.NoActionBar">
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/app_icon_company</item>
+        <item name="android:windowSplashScreenBackground">@color/main_background</item>
+        <item name="android:windowSplashScreenAnimationDuration">200</item>
+        <!-- 设置透明以显示原始图标，不再出现白色圆角方块 -->
+        <item name="android:windowSplashScreenIconBackgroundColor">@android:color/transparent</item>
+    </style>
+</resources>
+
+
